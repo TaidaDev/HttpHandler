@@ -1,0 +1,112 @@
+--〔 Services 〕--
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerStorage = game:GetService("ServerStorage")
+local HttpService = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
+
+--〔 Modules 〕--
+local WebhookFormats = RunService:IsServer() and require(ServerStorage:WaitForChild("Modules"):WaitForChild("WebhookFormats"))
+
+--〔 Variables 〕--
+local HttpHandler = {}
+
+local StatementMade = false
+local IsBlocked = false
+
+--〔 Checks 〕--
+if RunService:IsServer() and not StatementMade then
+	StatementMade = true
+  
+	task.spawn(function()
+	  local Success, Response = pcall(function()
+      return HttpService:GetAsync("https://discord.com")
+    end)
+    
+    if Success then
+      IsBlocked = false
+      warn("Roblox is not blocked from Discord. No Proxy required.")
+    else
+      IsBlocked = true
+      warn("Roblox is blocked from Discord. Proxy is required.")
+    end
+	end)
+end
+
+--〔 Module Functions 〕--
+HttpHandler["PostWebhook"] = function(WebhookName, ...)
+	local WebhookData = WebhookFormats[WebhookName]
+
+	if WebhookData then
+		local Arguments = {...}
+		local DataToSend = {
+			["embeds"] = {
+				{
+					["fields"] = {},
+					["footer"] = {
+						["text"] = "The Weakest-Link"
+					},
+					["thumbnail"] = {
+						["url"] = ""
+					}
+				}
+			}
+		}
+
+		DataToSend["username"] = WebhookData.Username
+		DataToSend["embeds"][1]["title"] = WebhookData.Title
+		DataToSend["embeds"][1]["description"] = WebhookData.Description
+		DataToSend["embeds"][1]["color"] = WebhookData.Color
+    
+		local Fields = WebhookData.GenerateFields(Arguments)
+
+		for Index, Value in ipairs(Fields) do
+			DataToSend["embeds"][1]["fields"][Index] = Value
+		end
+    
+		if IsBlocked then
+			WebhookData.Url = "https://webhook.lewistehminerz.dev/api/webhooks/"..WebhookData.Url
+		else
+			WebhookData.Url = "https://discord.com/api/webhooks/"..WebhookData.Url
+		end
+
+		local EncodedData = HttpService:JSONEncode(DataToSend)
+		local Success, Response = pcall(function()
+			HttpService:PostAsync(WebhookData.Url, EncodedData)
+		end)
+
+		if not Success then
+			warn(Response)
+		end
+	end
+end
+
+HttpHandler["GetServerRegion"] = function()
+	local Result = nil
+
+	local Success, Response = pcall(function()
+		Result = HttpService:JSONDecode(HttpService:GetAsync("https://api4.my-ip.io/ip.json"))
+	end)
+  
+	local IpAddress = Result and Result.ip
+
+	if IpAddress then
+		local Location = nil
+    
+		local Success, Response = pcall(function()
+			Location = HttpService:JSONDecode(HttpService:GetAsync("http://ip-api.com/json/"..IpAddress))
+		end)
+    
+		if Location then
+			return Location.countryCode.."/"..Location.regionName
+		else
+			warn(Response)
+			return nil, nil
+		end
+	else
+		warn(Response)
+		return nil, nil
+	end
+end
+
+--〔 Return 〕--
+return HttpHandler
